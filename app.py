@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 # Import our custom modules
 import auth_utils
-import database
+import db_utils as database
 import embedding_utils
 import challenges
 import genai_utils

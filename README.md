@@ -27,7 +27,7 @@ Ensure your local project directory contains all necessary files:
 vector-hunt-challenge/
 │
 ├── app.py
-├── database.py
+├── db_utils.py
 ├── embedding_utils.py
 ├── challenges.py
 ├── auth_utils.py
