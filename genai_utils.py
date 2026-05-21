@@ -7,6 +7,7 @@ Enforces JSON responses and degrades gracefully to markdown/text on failures.
 
 import re
 import json
+import os
 import streamlit as st
 
 # =====================================================================
@@ -16,11 +17,51 @@ OPENAI_MODEL = "gpt-4o-mini"
 GEMINI_MODEL = "gemini-2.5-flash"
 GROQ_MODEL = "llama-3.1-8b-instant"
 
+PROVIDER_ENV_KEYS = {
+    "OpenAI": "OPENAI_API_KEY",
+    "Google Gemini": "GEMINI_API_KEY",
+    "Groq": "GROQ_API_KEY",
+}
+
 def get_student_api_key():
     """
     Safely retrieve the student-entered API key from Streamlit session state.
     """
     return st.session_state.get("student_api_key", None)
+
+
+def get_provider_api_key(provider):
+    """
+    Resolve an app-level API key from Streamlit secrets or environment variables.
+    """
+    env_key_name = PROVIDER_ENV_KEYS.get(provider)
+    if not env_key_name:
+        return None
+
+    try:
+        if st.secrets and env_key_name in st.secrets:
+            return st.secrets[env_key_name]
+    except Exception:
+        pass
+
+    return os.environ.get(env_key_name)
+
+
+def get_effective_evaluator_credentials():
+    """
+    Choose the provider from session state and prefer the student key.
+    Falls back to app-level environment/secrets keys when present.
+    """
+    provider = st.session_state.get("ai_provider", "OpenAI")
+    student_key = get_student_api_key()
+    if student_key and student_key.strip():
+        return provider, student_key.strip()
+
+    app_key = get_provider_api_key(provider)
+    if app_key and str(app_key).strip():
+        return provider, str(app_key).strip()
+
+    return provider, None
 
 def safe_parse_json(text):
     """
@@ -61,6 +102,23 @@ def get_fallback_json(raw_text):
             "Raw response: " + str(raw_text)[:300]
         ],
         "concept_explanation": "Embeddings measure the alignment of conceptual meaning. Closer alignment yields higher similarity values."
+    }
+
+
+def _fallback_llm_evaluation_payload(input_texts):
+    """
+    Return an empty structured scoring payload when LLM judging is unavailable.
+    """
+    return {
+        "results": [
+            {
+                "input_text": text,
+                "similarity_score": 0.0,
+                "is_correct": 0,
+                "short_reason": "LLM evaluator unavailable.",
+            }
+            for text in input_texts
+        ]
     }
 
 def generate_ai_feedback(provider, api_key, level_name, target_text, results_data):
@@ -119,6 +177,100 @@ Expected JSON output format:
             return get_fallback_json(f"Selected provider '{provider}' is not supported yet.")
     except Exception as e:
         return get_fallback_json(f"API Error ({provider}): {str(e)}")
+
+
+def evaluate_challenge_with_llm(provider, api_key, level_name, target_text, input_texts, threshold):
+    """
+    Use an LLM to score each student input against the target meaning.
+    Returns a structured JSON-compatible dict.
+    """
+    if not api_key:
+        return _fallback_llm_evaluation_payload(input_texts)
+
+    numbered_inputs = "\n".join(
+        f"{idx + 1}. {text}" for idx, text in enumerate(input_texts)
+    )
+    prompt = f"""
+You are grading a classroom semantic search challenge.
+
+Level name: {level_name}
+Target meaning/text: "{target_text}"
+Pass threshold: {threshold}
+
+Student inputs:
+{numbered_inputs}
+
+Your task:
+1. Judge semantic similarity, not exact word overlap alone.
+2. Penalize trivial copying or shallow variants of the target.
+3. Inputs like exact copies, pluralized copies, or filler phrases around the same keyword
+   such as "doctor", "doctors", "the best doctor" should score very low unless they add a genuinely different related concept.
+4. Strong semantic alternatives and paraphrases should score higher.
+5. Return similarity_score as a decimal from 0.0 to 1.0.
+6. Set is_correct to 1 only if the input should count as a valid semantic match at or above the threshold.
+
+Return strict JSON only in this format:
+{{
+  "results": [
+    {{
+      "input_text": "exact original input",
+      "similarity_score": 0.73,
+      "is_correct": 1,
+      "short_reason": "brief justification"
+    }}
+  ]
+}}
+"""
+    try:
+        if provider == "OpenAI":
+            data = evaluate_with_openai(api_key, prompt)
+        elif provider == "Google Gemini":
+            data = evaluate_with_gemini(api_key, prompt)
+        elif provider == "Groq":
+            data = evaluate_with_groq(api_key, prompt)
+        else:
+            return _fallback_llm_evaluation_payload(input_texts)
+    except Exception:
+        return _fallback_llm_evaluation_payload(input_texts)
+
+    if not isinstance(data, dict) or "results" not in data or not isinstance(data["results"], list):
+        return _fallback_llm_evaluation_payload(input_texts)
+
+    normalized_results = []
+    result_map = {}
+    for item in data["results"]:
+        if not isinstance(item, dict):
+            continue
+        input_text = str(item.get("input_text", "")).strip()
+        if not input_text:
+            continue
+        try:
+            score = float(item.get("similarity_score", 0.0))
+        except Exception:
+            score = 0.0
+        score = max(0.0, min(1.0, score))
+        is_correct = 1 if int(item.get("is_correct", 0)) == 1 else 0
+        result_map[input_text] = {
+            "input_text": input_text,
+            "similarity_score": score,
+            "is_correct": is_correct,
+            "short_reason": str(item.get("short_reason", "")).strip(),
+        }
+
+    for text in input_texts:
+        normalized_results.append(
+            result_map.get(
+                text,
+                {
+                    "input_text": text,
+                    "similarity_score": 0.0,
+                    "is_correct": 0,
+                    "short_reason": "Missing from LLM output.",
+                },
+            )
+        )
+
+    return {"results": normalized_results}
 
 def evaluate_with_openai(api_key, prompt):
     """

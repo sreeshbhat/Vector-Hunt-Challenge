@@ -442,9 +442,30 @@ def play_semantic_challenge(level_number, level_name, challenge_list):
             st.error("🛑 Validation Failed: Duplicate items detected! All 10 entries must be unique to map distinctive vector coords.")
             return
             
-        with st.spinner("Analyzing semantic vectors and computing high-dimensional distances..."):
-            # Compute embeddings and prepare results
-            res_df = embedding_utils.prepare_similarity_results(selected_target, cleaned_inputs, threshold)
+        with st.spinner("Evaluating semantic matches..."):
+            provider, evaluator_api_key = genai_utils.get_effective_evaluator_credentials()
+
+            if evaluator_api_key:
+                llm_eval = genai_utils.evaluate_challenge_with_llm(
+                    provider,
+                    evaluator_api_key,
+                    f"Level {level_number}: {level_name}",
+                    selected_target,
+                    cleaned_inputs,
+                    threshold
+                )
+                res_df = pd.DataFrame(llm_eval.get("results", []))
+                if not res_df.empty:
+                    res_df["similarity_score"] = res_df["similarity_score"].astype(float).clip(-1.0, 1.0)
+                    res_df["similarity_percentage"] = res_df["similarity_score"].apply(lambda x: round(float(x) * 100, 2))
+                    res_df["is_correct"] = res_df["is_correct"].astype(int)
+                    st.caption(f"LLM evaluator active via {provider}.")
+                else:
+                    res_df = embedding_utils.prepare_similarity_results(selected_target, cleaned_inputs, threshold)
+                    st.caption("LLM evaluation failed. Falling back to local semantic scorer.")
+            else:
+                res_df = embedding_utils.prepare_similarity_results(selected_target, cleaned_inputs, threshold)
+                st.caption("Local semantic scorer active. Add an API key to enable LLM judging.")
             
             if res_df.empty:
                 st.error("An error occurred during vector comparisons.")

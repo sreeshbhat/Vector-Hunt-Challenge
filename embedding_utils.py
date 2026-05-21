@@ -218,6 +218,12 @@ DOMAIN_HINTS = {
     "domain_wellness": {"wellness", "beverage"},
 }
 
+STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "best", "by", "for", "from",
+    "good", "great", "in", "is", "it", "of", "on", "or", "our", "really",
+    "so", "super", "the", "their", "this", "to", "top", "very", "with",
+}
+
 
 def _normalize_text(text):
     text = str(text or "").lower()
@@ -269,6 +275,62 @@ def _expand_text(text):
         expanded_tokens.extend(["domain_river"] * 6)
 
     return " ".join(expanded_tokens)
+
+
+def _canonical_tokens(text):
+    """
+    Normalize a text into comparable lexical tokens for anti-copy checks.
+    """
+    normalized_text = _normalize_text(text)
+    canonical = []
+    for raw_token in normalized_text.split():
+        if raw_token in STOPWORDS:
+            continue
+        token = _stem_token(raw_token)
+        if token and token not in STOPWORDS:
+            canonical.append(token)
+    return canonical
+
+
+def _apply_lexical_penalty(target_text, input_text, semantic_score):
+    """
+    Penalize direct lexical reuse so trivial variants do not score as strong semantic matches.
+    """
+    target_tokens = _canonical_tokens(target_text)
+    input_tokens = _canonical_tokens(input_text)
+
+    if not target_tokens or not input_tokens:
+        return semantic_score
+
+    target_set = set(target_tokens)
+    input_set = set(input_tokens)
+
+    # Exact normalized copy.
+    if target_tokens == input_tokens:
+        return min(semantic_score, 0.05)
+
+    # Single-word targets should reject trivial surface variants like
+    # "doctor", "doctors", "best doctor", "the doctor".
+    if len(target_set) == 1:
+        target_token = next(iter(target_set))
+        non_target_tokens = [token for token in input_tokens if token != target_token]
+        if target_token in input_set:
+            if not non_target_tokens:
+                return min(semantic_score, 0.05)
+            if len(non_target_tokens) <= 2:
+                return min(semantic_score, 0.18)
+
+    overlap_ratio = len(target_set & input_set) / max(len(target_set), 1)
+    copied_ratio = len(target_set & input_set) / max(len(input_set), 1)
+
+    # Strong lexical copying for sentence targets should not auto-pass.
+    if overlap_ratio >= 0.8 and copied_ratio >= 0.8:
+        return min(semantic_score * 0.35, 0.35)
+
+    if overlap_ratio >= 0.6 and copied_ratio >= 0.6:
+        return semantic_score * 0.6
+
+    return semantic_score
 
 
 @st.cache_resource(show_spinner="Loading local semantic embedding model...")
@@ -349,7 +411,8 @@ def prepare_similarity_results(target_text, input_texts, threshold):
 
         results = []
         for text, score in zip(input_texts, scores):
-            score_clipped = float(np.clip(score, -1.0, 1.0))
+            penalized_score = _apply_lexical_penalty(target_text, text, float(score))
+            score_clipped = float(np.clip(penalized_score, -1.0, 1.0))
             percentage = round(score_clipped * 100, 2)
             is_correct = score_clipped >= threshold
             results.append(
