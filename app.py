@@ -7,6 +7,9 @@ Designed to be Streamlit Cloud-friendly, secure, and highly educational.
 
 import time
 import os
+import importlib
+import importlib.util
+from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -16,10 +19,38 @@ from dotenv import load_dotenv
 
 # Import our custom modules
 import auth_utils
-import db_utils as database
 import embedding_utils
 import challenges
 import genai_utils
+
+
+def _load_database_module():
+    """
+    Load the local database helper module robustly across deploy environments.
+    Prefer `db_utils`, but fall back to `database` and direct file loading.
+    """
+    for module_name in ("db_utils", "database"):
+        try:
+            return importlib.import_module(module_name)
+        except Exception:
+            continue
+
+    app_dir = Path(__file__).resolve().parent
+    for filename, module_name in (("db_utils.py", "db_utils"), ("database.py", "database")):
+        file_path = app_dir / filename
+        if not file_path.exists():
+            continue
+
+        spec = importlib.util.spec_from_file_location(module_name, file_path)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+
+    raise ImportError("Could not load database helper module from db_utils.py or database.py")
+
+
+database = _load_database_module()
 
 # Load environment variables
 load_dotenv()
