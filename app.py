@@ -137,7 +137,7 @@ if "device_fingerprint" not in st.session_state:
 if "l4_points" not in st.session_state:
     st.session_state["l4_points"] = {}  # maps query_index -> points earned
 
-# Pre-load sentence transformers model cache immediately
+# Pre-load embedding model cache immediately
 try:
     embedding_utils.load_model()
 except Exception:
@@ -272,18 +272,18 @@ with tabs[0]:
             st.rerun()
             
     else:
-        st.write("Please sign in using your classroom roll number and full name as registered in `students.json`.")
+        st.write("Please sign in using your classroom roll number and registered full name as listed in `students.json`.")
         
         col_log_1, col_log_2 = st.columns(2)
         with col_log_1:
             with st.form("student_login_form"):
-                inp_roll = st.text_input("Enter Roll Number", placeholder="e.g. 101").strip()
-                inp_name = st.text_input("Enter Registered Name", placeholder="e.g. Rahul Kumar").strip()
+                inp_roll = st.text_input("Enter Roll Number", placeholder="e.g. 23EG106A05").strip()
+                inp_name = st.text_input("Enter Registered Name", placeholder="e.g. Bilakanti Sruthi").strip()
                 submit_login = st.form_submit_button("Verify & Enter Game", use_container_width=True)
                 
                 if submit_login:
                     if not inp_roll or not inp_name:
-                        st.error("⚠️ Both roll number and name are required.")
+                        st.error("⚠️ Roll number and name are required.")
                     else:
                         # Verify using auth_utils
                         res = auth_utils.verify_student_login(inp_roll, inp_name)
@@ -1132,7 +1132,7 @@ with tabs[7]:
         It uses approximate nearest neighbor algorithms (ANN) to locate matching vectors across millions of rows in milliseconds.
         
         #### 7. Optional API Key Integration
-        We use the Sentence-Transformer library to perform all game-level cosine similarity checks completely offline.
+        We use a lightweight local semantic embedding engine to perform all game-level cosine similarity checks completely offline.
         However, if you want an AI tutor to explain *why* some vectors were weak or how they compare to the target target conceptually, you can enter your temporary API key in the sidebar. This key is stored in your local browser sandbox memory and cleared when you log out.
         """)
 

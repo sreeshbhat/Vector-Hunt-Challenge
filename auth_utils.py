@@ -43,13 +43,15 @@ def load_students(json_path="students.json"):
             students_dict[roll] = {
                 "roll_number": roll,
                 "name": student.get("name", "").strip(),
-                "class_section": student.get("class_section", "A").strip()
+                "class_section": student.get("class_section", "A").strip(),
+                "access_code": str(student.get("access_code", "")).strip()
             }
     return students_dict
 
-def verify_student_login(roll_number, entered_name, json_path="students.json"):
+def verify_student_login(roll_number, entered_name, entered_access_code=None, json_path="students.json"):
     """
-    Checks if a roll number exists and whether the entered name matches the registered student.
+    Checks if a roll number exists and whether the entered name matches.
+    Access codes are ignored so all registered students can sign in directly.
     Returns a dict with verification details.
     """
     roll_number = str(roll_number).strip()
@@ -66,7 +68,6 @@ def verify_student_login(roll_number, entered_name, json_path="students.json"):
             "reason": "Empty name",
             "student": None
         }
-
     try:
         students = load_students(json_path)
     except Exception as e:
@@ -100,7 +101,7 @@ def verify_student_login(roll_number, entered_name, json_path="students.json"):
             }
         }
 
-    # 3. Successful match
+    # Successful match
     return {
         "success": True,
         "reason": "Login successful",

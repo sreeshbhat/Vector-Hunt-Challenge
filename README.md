@@ -9,7 +9,7 @@ Suitable for GenAI, Natural Language Processing (NLP), or general Data Science c
 ## 💡 What Students Learn
 
 By participating in the **Vector Hunt Challenge**, students will master the following core concepts:
-1. **Vectors and Embeddings:** Transforming natural language text into dense high-dimensional vectors (using the cached, local Sentence-Transformer model `all-MiniLM-L6-v2`).
+1. **Vectors and Embeddings:** Transforming natural language text into dense high-dimensional vectors using the app's local semantic embedding engine.
 2. **Cosine Similarity:** Understanding how models measure the angular alignment of meaning between vectors.
 3. **Contextual Shift (Context Trap):** Discovering how the semantic representation of homonyms (e.g. *Apple*, *Bank*, *Java*) warps entirely based on adjacent context.
 4. **Vector Search Engine Logic:** Encapsulating search queries and ranking matched documents based on nearest semantic distances rather than character overlaps.
@@ -93,13 +93,13 @@ The application is structured to be entirely Streamlit Cloud-friendly:
    ```toml
    ADMIN_PASSWORD = "your_secure_classroom_password"
    ```
-4. **Offline Similarity Matching:** The core vector game uses the cached `sentence-transformers` model locally, meaning **no paid third-party API key** is needed for the instructor or students to play all four levels!
+4. **Offline Similarity Matching:** The core vector game uses a local semantic embedding engine, meaning **no paid third-party API key** is needed for the instructor or students to play all four levels!
 
 ---
 
 ## 🎮 Game Rules & Level Explanations
 
-To log in, students must enter their **registered roll number** and **registered name** exactly as configured in [students.json](file:///d:/Desktop/AI-ML-Materials/Gen-AI/Projects/vector-hunt-challenge/students.json). Names are matched in a case-insensitive and whitespace-insensitive manner.
+To log in, students must enter their **registered roll number** and **registered name** exactly as configured in `students.json`. Names are matched in a case-insensitive and whitespace-insensitive manner.
 
 ### Level 1: Word Similarity Challenge
 * **Goal:** Understand that words representing similar concepts map close to each other in vector spaces.
